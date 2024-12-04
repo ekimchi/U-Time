@@ -13,5 +13,5 @@ scikit-learn>=1.5.2
 requests>=2.32.3
 carbontracker>=2.0.1
 psg_utils>=0.1.6
-tensorflow>=2.18.0
+tensorflow[and-cuda]>=2.18.0
 yamlhparams>=0.2.0
