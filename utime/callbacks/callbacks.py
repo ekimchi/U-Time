@@ -70,12 +70,17 @@ class Validation(Callback):
         return tps, rel, sel
 
     def predict(self):
-        # Get tensors to run and their names
-        metrics = getattr(self.model, "loss_functions", self.model.losses) or self.model.loss + self.model.metrics
-        metrics = list(filter(lambda m: not type(m) is tf.keras.metrics.Mean, metrics))
-        metrics_names = self.model.metrics_names
+        # NOTE: In recent keras versions, the self.model.metrics_names is a list ['loss', 'compiled_metrics']
+        #       compiled_metrics is a single callable that computes all metrics and returns a dictionary of
+        #       original metric names to metric values. Assert here that the structure of model.metrics and
+        #       model.metrics_names are as expected.
+        err = 'Unexpected metric names, possible TensorFlow/Keras version mismatch. Got metric_names: {}. Try to install tensorflow >=2.18 and keras >=3.7.'.format(self.model.metrics_names)
+        assert self.model.metrics_names[0] == 'loss', err
+        assert len(self.model.metrics_names) in (1, 2), err
+        assert len(self.model.metrics_names) == 1 or self.model.metrics_names[1] == 'compile_metrics', err
+
+        # Reset any stateful metrics before evaluating first study
         self.model.reset_metrics()
-        assert len(metrics_names) == len(metrics)
 
         # Prepare arrays for CM summary stats
         true_pos, relevant, selected, metrics_results = {}, {}, {}, {}
@@ -112,22 +117,26 @@ class Validation(Callback):
                 relevant[id_] += rel
                 selected[id_] += sel
 
-                # Run all metrics
-                for metric, name in zip(metrics, metrics_names):
-                    res = tf.reduce_mean(metric(y, pred))
+                # Compute any metrics and loss on the study
+                metrics = self.model.compute_metrics(x, y, pred)
+                metrics['loss'] = self.model.compute_loss(x, y, pred, training=False)
+
+                # Iterate metrics and conver to numpy
+                for metric_name, metric_value_tensor in metrics.items():
+                    res = tf.reduce_mean(metric_value_tensor)  # usually not needed, but is metric dependent
                     if hasattr(pred, "numpy"):
                         res = res.numpy()
-                    per_study_metrics[name].append(res)
-                    if getattr(metric, "stateful", False):
-                        if hasattr(metric, "reset_states"):
-                            metric.reset_states()
-                        else:
-                            metric.reset_state()
+                    per_study_metrics[metric_name].append(res)
+
+                # Reset any stateful metrics before processing next study
+                self.model.reset_metrics()
 
             # Compute mean metrics for the dataset
             metrics_results[id_] = {}
-            for metric, name in zip(metrics, metrics_names):
-                metrics_results[id_][name] = np.mean(per_study_metrics[name])
+            for name, metric_values in per_study_metrics.items():
+                metrics_results[id_][name] = np.mean(metric_values)
+
+            # Reset any stateful metrics before processing next dataset
             self.model.reset_metrics()
         return true_pos, relevant, selected, metrics_results
 
@@ -213,11 +222,10 @@ class Validation(Callback):
         if len(self.IDs) > 1:
             # Print cross-dataset mean values
             logger.info(highlighted(f"[ALL DATASETS] Means Across Classes for Epoch {epoch}"))
-            fetch = ("val_dice", "val_precision", "val_recall")
-            m_fetch = tuple(["val_" + s for s in self.model.metrics_names])
+            metric_base_names = [m.split('val')[1] for m in metrics[self.IDs[0]]]  # All have similar metric base names
             to_print = {}
-            for f in fetch + m_fetch:
-                scores = [logs["%s_%s" % (name, f)] for name in self.IDs]
+            for m_name in metric_base_names:
+                scores = [logs["%s_val_%s" % (ds_id, m_name)] for ds_id in self.IDs]
                 res = np.mean(scores)
                 logs[f] = res.round(self.log_round)  # Add to log file
                 to_print[f.split("_")[-1]] = list(scores) + [res]
