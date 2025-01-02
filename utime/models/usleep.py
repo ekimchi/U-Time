@@ -44,7 +44,9 @@ class InputReshape(Layer):
 
     def call(self, inputs, **kwargs):
         shape = shape_safe(inputs)
-        inputs_reshaped = tf.reshape(inputs, shape=[shape[0], self.seq_length or shape[1]*shape[2], 1, self.n_channels])
+        batch_shape = shape[0]
+        seq_length = self.seq_length or shape[1]*shape[2]
+        inputs_reshaped = tf.reshape(inputs, shape=[batch_shape, seq_length, 1, self.n_channels])
         return inputs_reshaped
 
 
@@ -62,10 +64,12 @@ class OutputReshape(Layer):
 
     def call(self, inputs, **kwargs):
         shape = shape_safe(inputs)
+        batch_shape = shape[0]
         n_pred = int(shape[1] // self.n_periods)
-        shape = [shape[0], self.n_periods or shape[1], n_pred, inputs.shape[-1]]
+        periods = self.n_periods or shape[1]
+        shape = [batch_shape, periods, n_pred, inputs.shape[-1]]
         if n_pred == 1:
-            shape.pop(2)
+            shape = shape[:2] + shape[3:]
         return tf.reshape(inputs, shape=shape)
 
 
@@ -74,8 +78,11 @@ class PadStartToEvenLength(Layer):
         super(PadStartToEvenLength, self).__init__(name=name, **kwargs)
 
     def call(self, inputs, **kwargs):
-        return tf.pad(inputs,
-                      paddings=[[0, 0], [shape_safe(inputs, 1) % 2, 0], [0, 0], [0, 0]])
+        shape = shape_safe(inputs, 1)
+        pad = shape % 2
+        paddings = [[0, 0], [pad, 0], [0, 0], [0, 0]]
+        padded = tf.pad(inputs, paddings=paddings)
+        return padded
 
 
 class PadToMatch(Layer):
@@ -84,8 +91,12 @@ class PadToMatch(Layer):
 
     def call(self, inputs, **kwargs):
         s = tf.maximum(0, shape_safe(inputs[1], 1) - shape_safe(inputs[0], 1))
-        return tf.pad(inputs[0],
-                      paddings=[[0, 0], [s // 2, s // 2 + (s % 2)], [0, 0], [0, 0]])
+        pad_l = s // 2
+        pad_r = s // 2 + (s % 2)
+        paddings = [[0, 0], [pad_l, pad_r], [0, 0], [0, 0]]
+        input_to_pad = inputs[0]
+        padded = tf.pad(input_to_pad, paddings=paddings)
+        return padded
 
 
 class CropToMatch(Layer):
@@ -95,7 +106,10 @@ class CropToMatch(Layer):
     def call(self, inputs, **kwargs):
         diff = tf.maximum(0, shape_safe(inputs[0], 1) - shape_safe(inputs[1], 1))
         start = diff//2 + diff % 2
-        return inputs[0][:, start:start+shape_safe(inputs[1], 1), :, :]
+        shape = shape_safe(inputs[1], 1)
+        input_to_crop = inputs[0]
+        cropped = input_to_crop[:, start:start+shape, :, :]
+        return cropped
 
 
 class USleep(Model):
@@ -192,8 +206,12 @@ class USleep(Model):
         super().__init__(*self.init_model(name_prefix=name))
 
         # Compute receptive field
-        ind = [x.__class__.__name__ for x in self.layers].index("UpSampling2D")
-        self.receptive_field = compute_receptive_fields(self.layers[:ind])[-1][-1]
+        # ind = [x.__class__.__name__ for x in self.layers].index("UpSampling2D")
+        # try:
+        #     self.receptive_field = compute_receptive_fields(self.layers[:ind])[-1][-1]
+        # except AttributeError as excp:
+        #     logger.warning("Could not compute receptive field.")
+        self.receptive_field = ["unknown"]
 
         # Log the model definition
         if not no_log:
@@ -340,7 +358,7 @@ class USleep(Model):
         if inputs is None:
             inputs = Input(shape=[self.n_periods, self.input_dims, self.n_channels])
         inputs_reshaped = InputReshape(seq_length, self.n_channels)(inputs)
-        
+
         # Apply regularization if not None or 0
         regularizer = regularizers.l2(self.l2_reg) if self.l2_reg else None
 
@@ -395,8 +413,7 @@ class USleep(Model):
                                        activation=self.activation,
                                        regularizer=regularizer,
                                        name_prefix=name_prefix)
-
-        return [inputs], [out]
+        return inputs, out
 
     def log(self):
         logger.info(f"\nUSleep Model Summary\n"
