@@ -222,13 +222,14 @@ class Validation(Callback):
         if len(self.IDs) > 1:
             # Print cross-dataset mean values
             logger.info(highlighted(f"[ALL DATASETS] Means Across Classes for Epoch {epoch}"))
-            metric_base_names = [m.split('val')[1] for m in metrics[self.IDs[0]]]  # All have similar metric base names
+            metric_base_names = list(metrics[self.IDs[0]].keys())  # All have similar metric base names
+            extra_metric_base_names =  ['dice', 'precision', 'recall']
             to_print = {}
-            for m_name in metric_base_names:
+            for m_name in metric_base_names + extra_metric_base_names:
                 scores = [logs["%s_val_%s" % (ds_id, m_name)] for ds_id in self.IDs]
                 res = np.mean(scores)
-                logs[f] = res.round(self.log_round)  # Add to log file
-                to_print[f.split("_")[-1]] = list(scores) + [res]
+                logs["val_" + m_name] = res.round(self.log_round)  # Add to log file
+                to_print[m_name] = list(scores) + [res]
             df = pd.DataFrame(to_print)
             df.index = self.IDs + ["mean"]
             logger.info("\n" + str(df.round(self.print_round)) + "\n")
