@@ -2,6 +2,9 @@ import logging
 import numpy as np
 import tensorflow
 from typing import List
+from collections.abc import Iterable
+from numbers import Number
+from ruamel.yaml.scalarfloat import ScalarFloat
 from psg_utils.utils import ensure_list_or_tuple
 from utime.errors import NotSparseError
 from utime.evaluation import loss_functions as custom_loss_functions
@@ -75,10 +78,36 @@ def _assert_all_classes(list_of_classes, assert_subclass_of=None):
             )
 
 
+def type_convert_kwargs(init_kwargs: dict) -> None:
+    """
+    Recursively converts values of type ScalarFloat to float within a dictionary.
+    Handles nested dictionaries and iterables (e.g., lists, tuples, sets).
+    """
+    def convert_value(value):
+        # Convert ScalarFloat to float
+        if isinstance(value, ScalarFloat):
+            return float(value)
+        # If value is a dictionary, recursively call the function
+        elif isinstance(value, dict):
+            type_convert_kwargs(value)
+            return value
+        # If value is an iterable, convert its elements
+        elif isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
+            return type(value)(convert_value(v) for v in value)
+        # If value is neither a ScalarFloat nor an iterable, return it as is
+        else:
+            return value
+
+    # Iterate over the dictionary items and apply conversion
+    for key, value in init_kwargs.items():
+        init_kwargs[key] = convert_value(value)
+
+
 def _init_losses_or_metrics(list_of_losses_or_metrics, ignore_out_of_bounds_classes, wrap_method_name=None, **init_kwargs):
     """
     TODO
     """
+    type_convert_kwargs(init_kwargs)
     for i, func_or_cls in enumerate(list_of_losses_or_metrics):
         try:
             func_or_cls = func_or_cls(**init_kwargs)
@@ -132,6 +161,7 @@ def init_losses(loss_string_list, reduction, ignore_out_of_bounds_classes=False,
         A list of length(loss_string_list) of loss functions or initialized
         classes
     """
+    type_convert_kwargs(kwargs)
     losses = _get_classes_or_funcs(loss_string_list,
                                    func_modules=[tensorflow.keras.losses,
                                                  custom_loss_functions])
@@ -148,6 +178,7 @@ def init_metrics(metric_string_list, ignore_out_of_bounds_classes=False, **kwarg
     Same as 'init_losses', but for metrics.
     Please refer to the 'init_losses' docstring.
     """
+    type_convert_kwargs(kwargs)
     metrics = _get_classes_or_funcs(metric_string_list,
                                     func_modules=[tensorflow.keras.metrics])
     _assert_all_classes(metrics, assert_subclass_of=tensorflow.keras.metrics.Metric)
@@ -162,6 +193,7 @@ def init_optimizer(optimizer_string, **kwargs):
     Same as 'init_losses', but for optimizers.
     Please refer to the 'init_losses' docstring.
     """
+    type_convert_kwargs(kwargs)
     optimizer = _get_classes_or_funcs(
         optimizer_string,
         func_modules=[tensorflow.keras.optimizers]
