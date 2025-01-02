@@ -167,9 +167,6 @@ class Trainer(object):
             epochs=n_epochs,
             callbacks=callbacks,
             initial_epoch=init_epoch,
-            use_multiprocessing=False,
-            workers=3,
-            max_queue_size=10,
             shuffle=False,  # Determined by the chosen Sequence class
             verbose=verbose
         )
