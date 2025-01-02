@@ -1,4 +1,4 @@
-numpy>=2.0.2
+numpy>=1.26.4
 h5py>=3.12.1
 matplotlib>=3.9.2
 pandas>=2.2.3
@@ -14,4 +14,5 @@ requests>=2.32.3
 carbontracker>=2.0.1
 psg_utils>=0.1.6
 tensorflow[and-cuda]>=2.18.0
+keras>=3.7.0
 yamlhparams>=0.2.0
