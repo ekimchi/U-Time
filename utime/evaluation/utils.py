@@ -13,7 +13,6 @@ def ignore_out_of_bounds_classes_wrapper(func):
     'n_pred_classes' is determined as the length of the prediction tensor on the last dimension.
     """
     @wraps(func)
-    @tf.function
     def wrapper(true, pred, **kwargs):
         true.set_shape(pred.get_shape()[:-1] + [1])
         n_pred_classes = pred.get_shape()[-1]
