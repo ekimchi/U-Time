@@ -14,6 +14,8 @@ def ignore_out_of_bounds_classes_wrapper(func):
     """
     @wraps(func)
     def wrapper(true, pred, **kwargs):
+        true = tf.convert_to_tensor(true)
+        pred = tf.convert_to_tensor(pred)
         true.set_shape(pred.get_shape()[:-1] + [1])
         n_pred_classes = pred.get_shape()[-1]
         true = tf.reshape(true, [-1])
