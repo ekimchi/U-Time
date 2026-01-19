@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: utime
 Version: 1.1.8
 Summary: A deep learning framework for automatic PSG sleep analysis.
@@ -31,6 +31,16 @@ Requires-Dist: psg_utils>=0.1.6
 Requires-Dist: tensorflow>=2.8.0
 Requires-Dist: tensorflow-addons>=0.16.1
 Requires-Dist: yamlhparams>=0.2.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
 
 # U-Time & U-Sleep
 
